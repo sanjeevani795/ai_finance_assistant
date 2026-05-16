@@ -1,0 +1,11 @@
+# Short sample corpus for local demos (educational snippets; not legal/financial advice).
+
+Dollar-cost averaging (DCA) means investing a fixed dollar amount on a regular schedule regardless of price. The goal is to reduce the impact of volatility by buying more shares when prices are lower and fewer when prices are higher, on average over time.
+
+An exchange-traded fund (ETF) is a basket of securities that trades on an exchange like a stock. ETFs often track an index and can offer diversification with typically lower expense ratios than some actively managed mutual funds, though all investments carry risk.
+
+A 401(k) is an employer-sponsored retirement plan that allows employees to contribute pre-tax or Roth dollars depending on plan rules. Employer matching, when offered, can be a powerful component of retirement savings; limits and rules change over time—verify current IRS limits.
+
+An Individual Retirement Account (IRA) is a tax-advantaged account individuals can open outside an employer plan. Traditional IRAs may offer tax-deferred growth while Roth IRAs can offer tax-free qualified withdrawals, subject to eligibility and rules.
+
+Emergency funds are cash reserves intended to cover essential expenses during income loss or unexpected costs. Common guidance suggests targeting several months of expenses, but the right amount depends on job stability, dependents, and insurance coverage.

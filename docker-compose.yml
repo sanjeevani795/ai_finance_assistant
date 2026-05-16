@@ -1,0 +1,41 @@
+# Local / single-host deployment. Do not commit a real `.env` file.
+#
+# Quick start:
+#   export OPENAI_API_KEY=sk-...
+#   docker compose up --build
+#
+# Optional: persist FAISS + logs on the host by uncommenting volumes in `docker-compose.yml`.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-finance-assistant:local
+    ports:
+      - "${PUBLISH_PORT:-7860}:7860"
+    environment:
+      GRADIO_SERVER_NAME: "0.0.0.0"
+      GRADIO_SERVER_PORT: "7860"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ALPHA_VANTAGE_API_KEY: "${ALPHA_VANTAGE_API_KEY:-}"
+    # Uncomment to load variables from a gitignored local file:
+    # env_file:
+    #   - .env
+    # Uncomment to persist indices and logs across container restarts:
+    volumes:
+      - ./data/faiss_index:/app/data/faiss_index
+      - ./logs:/app/logs
+
+  # One-off index build (requires OPENAI_API_KEY for embeddings). Run before first chat if you use a bind mount for FAISS.
+  ingest:
+    profiles: ["ingest"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-finance-assistant:local
+    environment:
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+    volumes:
+      - ./data/faiss_index:/app/data/faiss_index
+    command: ["python", "scripts/build_demo_index.py"]
