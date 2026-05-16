@@ -23,6 +23,7 @@ from data.market_service import MarketDataService
 from rag.faiss_store import load_faiss
 from rag.retriever import FinanceRetriever
 from utils.logging_config import setup_logging
+from utils.scope_guard import OUT_OF_SCOPE_REPLY, is_finance_or_specialist_scope
 from workflow.graph import WorkflowDeps, build_graph, default_user_profile_json
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,11 @@ def make_respond_fn():
     ) -> Generator[tuple[list[list[str | None]], str], None, None]:
         message = (message or "").strip()
         if not message:
+            yield history, thread_id
+            return
+        if not is_finance_or_specialist_scope(message):
+            history = history or []
+            history.append([message, OUT_OF_SCOPE_REPLY])
             yield history, thread_id
             return
 
