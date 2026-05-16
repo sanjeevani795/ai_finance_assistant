@@ -160,7 +160,7 @@ Expected route:
 
 Prompt:
 
-`AAPL is 35% of my portfolio and MSFT is 20%. Is this too concentrated, and what is AAPL doing recently?`
+`summarize best practices for emergency fund sizing?`
 
 Expected route:
 
