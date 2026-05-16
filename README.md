@@ -12,7 +12,10 @@ This project is intended for educational financial guidance, not personalized in
 
 ## Architecture Overview
 
-Detailed visual flow: [WORKFLOW_DIAGRAM.md](/Users/sanjeevanishrivastava/IK_Project1/ai_finance_assistant/WORKFLOW_DIAGRAM.md)
+Detailed visual flow: 
+
+<img width="1259" height="664" alt="image" src="https://github.com/user-attachments/assets/943233e3-27df-4567-8890-8e8dbce40b46" />
+
 
 ### High-level flow
 
