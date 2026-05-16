@@ -18,7 +18,7 @@ def scope_rag(agent_id: str, full_rag: str) -> str:
 
 def scope_market(agent_id: str, full_market: str) -> str:
     """Market prefetch is passed to market + portfolio agents."""
-    if agent_id in {"market_analysis", "portfolio_analysis"}:
+    if agent_id in {"market_analysis", "portfolio_analysis", "news_synthesizer"}:
         return full_market
     return ""
 

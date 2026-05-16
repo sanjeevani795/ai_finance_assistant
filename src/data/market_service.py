@@ -13,7 +13,7 @@ from data.alpha_vantage import AlphaVantageClient
 from data.yfinance_client import yfinance_quote, yfinance_trend_summary
 from utils.cache import TTLCache
 from utils.retry import retry_call
-from utils.symbols import extract_tickers
+from utils.symbols import extract_company_alias_tickers, extract_tickers
 
 logger = logging.getLogger(__name__)
 _YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
@@ -25,7 +25,8 @@ def _normalize_company_query(text: str) -> str:
     if not q:
         return ""
     q = re.sub(
-        r"\b(what|is|the|price|trading|trade|at|stock|quote|of|for|today|right|now)\b",
+        r"\b(what|is|the|price|trading|trade|at|stock|quote|of|for|today|right|now|"
+        r"major|market|markets|headline|headlines|news|about|latest|recent)\b",
         " ",
         q,
         flags=re.IGNORECASE,
@@ -50,6 +51,36 @@ def _format_av_global_quote(payload: dict[str, Any]) -> dict[str, Any]:
         "previous_close": float(prev) if prev not in (None, "") else None,
         "change_percent_str": pct,
         "raw_quote": q,
+    }
+
+
+def _format_av_trend(payload: dict[str, Any], symbol: str) -> dict[str, Any]:
+    series = payload.get("Time Series (Daily)") if isinstance(payload, dict) else None
+    if not isinstance(series, dict) or not series:
+        raise RuntimeError("Alpha Vantage daily series missing.")
+    closes: list[float] = []
+    for date_key in sorted(series.keys()):
+        row = series.get(date_key)
+        if not isinstance(row, dict):
+            continue
+        close = row.get("4. close")
+        if close in (None, ""):
+            continue
+        try:
+            closes.append(float(close))
+        except Exception:  # noqa: BLE001
+            continue
+    if not closes:
+        raise RuntimeError("Alpha Vantage daily close data missing.")
+    last = closes[-1]
+    week_ago = closes[-5] if len(closes) >= 5 else last
+    month_ago = closes[-21] if len(closes) >= 21 else last
+    return {
+        "symbol": symbol.upper().strip(),
+        "source": "alphavantage",
+        "last_close": last,
+        "approx_1w_change_pct": (last - week_ago) / week_ago * 100.0 if week_ago else None,
+        "approx_1m_change_pct": (last - month_ago) / month_ago * 100.0 if month_ago else None,
     }
 
 
@@ -138,6 +169,15 @@ class MarketDataService:
         if explicit:
             return explicit
 
+        aliases = extract_company_alias_tickers(query, max_symbols=max_symbols)
+        if aliases:
+            return aliases
+
+        normalized = _normalize_company_query(query)
+        # Avoid high-noise remote symbol lookup on broad natural-language prompts.
+        if len(normalized.split()) > 3:
+            return []
+
         resolved = self._search_yahoo_symbols(query)
         if not resolved:
             resolved = self._search_alpha_vantage_symbols(query)
@@ -172,11 +212,20 @@ class MarketDataService:
 
     def trend(self, symbol: str) -> dict[str, Any]:
         sym = symbol.upper().strip()
+        errors: list[str] = []
         try:
             return yfinance_trend_summary(sym, self._cfg, self._cache)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Trend summary failed (%s): %s", sym, exc)
-            return {"symbol": sym, "source": "yfinance", "error": str(exc)}
+            errors.append(f"yFinance: {exc}")
+            logger.warning("Trend summary failed in yFinance (%s): %s", sym, exc)
+        if self._av is not None:
+            try:
+                raw = self._av.daily_series(sym, outputsize="compact")
+                return _format_av_trend(raw, sym)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"AlphaVantage: {exc}")
+                logger.warning("Trend summary failed in Alpha Vantage (%s): %s", sym, exc)
+        return {"symbol": sym, "source": "market", "error": "; ".join(errors) or "Trend data unavailable."}
 
     def quotes_for_symbols(self, symbols: list[str]) -> str:
         """Human-readable block for LLM context."""

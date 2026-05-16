@@ -15,6 +15,17 @@ _MARKET_HINT = re.compile(
     flags=re.IGNORECASE,
 )
 
+_COMPANY_ALIASES: tuple[tuple[str, str], ...] = (
+    ("nvidia", "NVDA"),
+    ("apple", "AAPL"),
+    ("microsoft", "MSFT"),
+    ("google", "GOOGL"),
+    ("alphabet", "GOOGL"),
+    ("amazon", "AMZN"),
+    ("meta", "META"),
+    ("tesla", "TSLA"),
+)
+
 
 def extract_tickers(text: str, *, max_symbols: int = 8) -> list[str]:
     # Exclude common English words mistaken for tickers (very small guard list).
@@ -58,3 +69,17 @@ def query_mentions_market(text: str) -> bool:
     if extract_tickers(q, max_symbols=1):
         return True
     return _MARKET_HINT.search(q) is not None
+
+
+def extract_company_alias_tickers(text: str, *, max_symbols: int = 8) -> list[str]:
+    q = (text or "").lower()
+    if not q:
+        return []
+    out: list[str] = []
+    for alias, sym in _COMPANY_ALIASES:
+        if re.search(rf"\b{re.escape(alias)}\b", q):
+            if sym not in out:
+                out.append(sym)
+            if len(out) >= max_symbols:
+                break
+    return out

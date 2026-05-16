@@ -15,10 +15,11 @@ def test_scope_rag_only_educational_agents() -> None:
     assert scope_rag("market_analysis", rag) == ""
 
 
-def test_scope_market_for_market_and_portfolio() -> None:
+def test_scope_market_for_market_portfolio_and_news() -> None:
     m = "AAPL last=1"
     assert scope_market("market_analysis", m) == m
     assert scope_market("portfolio_analysis", m) == m
+    assert scope_market("news_synthesizer", m) == m
     assert scope_market("finance_qa", m) == ""
 
 

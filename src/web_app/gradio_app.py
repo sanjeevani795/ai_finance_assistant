@@ -18,7 +18,7 @@ if str(_SRC) not in sys.path:
 
 import gradio as gr
 
-from core.config import load_config, require_openai_key
+from core.config import alpha_vantage_key, load_config, require_openai_key
 from data.market_service import MarketDataService
 from rag.faiss_store import load_faiss
 from rag.retriever import FinanceRetriever
@@ -46,6 +46,8 @@ def make_respond_fn():
     cfg = load_config()
     setup_logging(cfg.logs_dir)
     require_openai_key()
+    av_key = alpha_vantage_key()
+    logger.info("Alpha Vantage key detected: %s", "yes" if av_key else "no")
 
     store = load_faiss(cfg)
     retriever = FinanceRetriever(cfg, store)

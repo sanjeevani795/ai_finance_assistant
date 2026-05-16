@@ -115,3 +115,47 @@ class AlphaVantageClient:
             )
 
         return self._cache.get_or_set(cache_key, fetch)
+
+    def daily_series(self, symbol: str, *, outputsize: str = "compact") -> dict[str, Any]:
+        sym = symbol.upper().strip()
+        size = outputsize.strip().lower() or "compact"
+        if size not in {"compact", "full"}:
+            size = "compact"
+        cache_key = f"av:TIME_SERIES_DAILY:{sym}:{size}"
+
+        def fetch() -> dict[str, Any]:
+            self._throttle()
+            self._recent.append(time.monotonic())
+
+            def do_http() -> dict[str, Any]:
+                params = {
+                    "function": "TIME_SERIES_DAILY",
+                    "symbol": sym,
+                    "outputsize": size,
+                    "apikey": self._key,
+                }
+                r = requests.get(
+                    self._cfg.alpha_vantage_base_url,
+                    params=params,
+                    timeout=self._cfg.request_timeout,
+                )
+                r.raise_for_status()
+                data = r.json()
+                if not isinstance(data, dict):
+                    raise ValueError("Unexpected Alpha Vantage payload.")
+                note = data.get("Note") or data.get("Information")
+                if note:
+                    logger.warning("Alpha Vantage message: %s", note)
+                err = data.get("Error Message")
+                if err:
+                    raise RuntimeError(str(err))
+                return data
+
+            return retry_call(
+                do_http,
+                max_attempts=self._cfg.max_retries,
+                backoff_seconds=self._cfg.retry_backoff,
+                operation=f"AlphaVantage TIME_SERIES_DAILY {sym}",
+            )
+
+        return self._cache.get_or_set(cache_key, fetch)

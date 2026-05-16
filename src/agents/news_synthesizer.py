@@ -20,8 +20,18 @@ class NewsSynthesizerAgent(BaseAgent):
         )
 
     def extra_llm_blocks(self, ctx: AgentContext) -> str:
-        return news_context_block(
+        news_block = news_context_block(
             rss_urls=list(ctx.cfg.news_rss_urls),
             timeout=ctx.cfg.news_request_timeout_seconds,
             max_items_per_feed=ctx.cfg.news_max_items_per_feed,
         )
+        if news_block.strip():
+            return news_block
+        if ctx.market_context.strip():
+            return (
+                "RSS headlines could not be fetched right now. "
+                "Use the market snapshot below as a fallback signal and state clearly that live headlines were unavailable.\n\n"
+                "Market fallback context:\n"
+                f"{ctx.market_context.strip()}"
+            )
+        return ""

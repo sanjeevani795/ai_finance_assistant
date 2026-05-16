@@ -1,0 +1,37 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	prepare_context(prepare_context)
+	orchestrate(orchestrate)
+	specialist(specialist)
+	synthesize(synthesize)
+	__end__([<p>__end__</p>]):::last
+	subgraph Specialists["Specialist Agent Registry"]
+		finance_qa["finance_qa"]
+		portfolio_analysis["portfolio_analysis"]
+		market_analysis["market_analysis"]
+		goal_planning["goal_planning"]
+		news_synthesizer["news_synthesizer"]
+		tax_education["tax_education"]
+	end
+	__start__ --> prepare_context;
+	prepare_context --> orchestrate;
+	specialist --> synthesize;
+	synthesize --> __end__;
+	orchestrate -. "routes by agent id" .-> specialist;
+	specialist -. "invokes one selected agent" .-> finance_qa;
+	specialist -. "invokes one selected agent" .-> portfolio_analysis;
+	specialist -. "invokes one selected agent" .-> market_analysis;
+	specialist -. "invokes one selected agent" .-> goal_planning;
+	specialist -. "invokes one selected agent" .-> news_synthesizer;
+	specialist -. "invokes one selected agent" .-> tax_education;
+	orchestrate -.-> prepare_context;
+	orchestrate -.-> synthesize;
+	orchestrate -.-> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

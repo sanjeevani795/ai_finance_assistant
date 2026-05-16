@@ -16,6 +16,19 @@ def _yf_ticker(symbol: str) -> str:
     return symbol.strip().upper()
 
 
+def _history_with_fallbacks(ticker: Any, periods: tuple[str, ...]):
+    """Try a small sequence of history requests; yfinance can return empty intermittently."""
+    for period in periods:
+        try:
+            hist = ticker.history(period=period, interval="1d", auto_adjust=False)
+        except TypeError:
+            # Older yfinance versions may not support all kwargs consistently.
+            hist = ticker.history(period=period)
+        if hist is not None and not hist.empty:
+            return hist
+    return None
+
+
 def yfinance_quote(symbol: str, cfg: AppConfig, cache: TTLCache) -> dict[str, Any]:
     sym = _yf_ticker(symbol)
     cache_key = f"yf:quote:{sym}"
@@ -34,7 +47,7 @@ def yfinance_quote(symbol: str, cfg: AppConfig, cache: TTLCache) -> dict[str, An
                 prev = getattr(fast, "previous_close", None) or getattr(fast, "previousClose", None)
                 cur = getattr(fast, "currency", None) or getattr(fast, "currency_code", None)
             if last is None:
-                hist = t.history(period="5d")
+                hist = _history_with_fallbacks(t, ("5d", "1mo"))
                 if hist is None or hist.empty:
                     raise RuntimeError(f"No yFinance data for symbol {sym}.")
                 last = float(hist["Close"].iloc[-1])
@@ -75,7 +88,7 @@ def yfinance_trend_summary(symbol: str, cfg: AppConfig, cache: TTLCache) -> dict
             import yfinance as yf
 
             t = yf.Ticker(sym)
-            hist = t.history(period="3mo")
+            hist = _history_with_fallbacks(t, ("3mo", "6mo", "1y"))
             if hist is None or hist.empty:
                 raise RuntimeError(f"No history for {sym}.")
             closes = hist["Close"].astype(float)
