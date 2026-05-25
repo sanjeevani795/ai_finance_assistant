@@ -16,6 +16,21 @@ jobs:
           fetch-depth: 0
           lfs: true
 
+      - name: Validate required secrets
+        env:
+          HF_SPACE_REPO_ID: ${{ secrets.HF_SPACE_REPO_ID }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HF_SPACE_REPO_ID:-}" ]; then
+            echo "::error::Missing secret HF_SPACE_REPO_ID. Set it to '<hf_username>/<space_name>'."
+            exit 1
+          fi
+          if [ -z "${HF_TOKEN:-}" ]; then
+            echo "::error::Missing secret HF_TOKEN. Create a Hugging Face token with write access and store it as HF_TOKEN."
+            exit 1
+          fi
+
       - name: Push to Hugging Face Space
         uses: huggingface/hub-sync@v0.1.0
         with:

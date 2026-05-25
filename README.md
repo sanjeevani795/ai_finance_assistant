@@ -1,3 +1,13 @@
+---
+title: AI Finance Assistant
+emoji: 📈
+colorFrom: blue
+colorTo: green
+sdk: gradio
+app_file: src/web_app/gradio_app.py
+pinned: false
+---
+
 # AI Finance Assistant
 
 AI Finance Assistant is a multi-agent financial education application that combines:
