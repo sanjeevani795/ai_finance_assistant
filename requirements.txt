@@ -16,8 +16,8 @@ websockets==12.0
 requests==2.32.3
 
 # Web & config
-gradio==4.44.1
-huggingface_hub==0.25.2
+gradio==6.14.0
+huggingface_hub>=0.30.0
 fastapi==0.112.2
 starlette==0.38.6
 pyyaml==6.0.2
