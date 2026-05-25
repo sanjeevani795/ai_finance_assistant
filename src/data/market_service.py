@@ -37,13 +37,21 @@ def _normalize_company_query(text: str) -> str:
 
 
 def _format_av_global_quote(payload: dict[str, Any]) -> dict[str, Any]:
+    note = payload.get("Note") or payload.get("Information")
+    if note:
+        raise RuntimeError(f"Alpha Vantage rate/info message: {note}")
+    err = payload.get("Error Message")
+    if err:
+        raise RuntimeError(str(err))
     q = payload.get("Global Quote") or {}
     if not isinstance(q, dict):
-        return {"symbol": None, "source": "alphavantage", "raw": payload}
+        raise RuntimeError("Alpha Vantage quote payload missing Global Quote.")
     sym = q.get("01. symbol") or q.get("01. Symbol")
     price = q.get("05. price") or q.get("05. Price")
     prev = q.get("08. previous close") or q.get("08. Previous Close")
     pct = q.get("10. change percent") or q.get("10. Change Percent")
+    if sym in (None, "") or price in (None, ""):
+        raise RuntimeError("Alpha Vantage quote payload missing symbol/price.")
     return {
         "symbol": sym,
         "source": "alphavantage",
@@ -55,6 +63,12 @@ def _format_av_global_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_av_trend(payload: dict[str, Any], symbol: str) -> dict[str, Any]:
+    note = payload.get("Note") or payload.get("Information") if isinstance(payload, dict) else None
+    if note:
+        raise RuntimeError(f"Alpha Vantage rate/info message: {note}")
+    err = payload.get("Error Message") if isinstance(payload, dict) else None
+    if err:
+        raise RuntimeError(str(err))
     series = payload.get("Time Series (Daily)") if isinstance(payload, dict) else None
     if not isinstance(series, dict) or not series:
         raise RuntimeError("Alpha Vantage daily series missing.")

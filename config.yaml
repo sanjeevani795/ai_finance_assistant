@@ -11,7 +11,7 @@ paths:
   raw_docs_dir: "data/raw_docs"
 
 market:
-  cache_ttl_seconds: 300
+  cache_ttl_seconds: 1000
   alpha_vantage_base_url: "https://www.alphavantage.co/query"
   # Prefer yfinance when True (no API key); Alpha Vantage used as fallback or when forced
   prefer_yfinance: false
