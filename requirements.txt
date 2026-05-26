@@ -20,7 +20,7 @@ gradio==6.14.0
 huggingface_hub>=0.30.0
 pyyaml==6.0.2
 python-dotenv==1.0.1
-pydantic==2.8.2
+pydantic==2.12.5
 tiktoken==0.7.0
 
 # Ingestion
