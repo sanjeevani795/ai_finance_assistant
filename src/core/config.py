@@ -64,7 +64,14 @@ def load_config(config_path: Path | None = None) -> AppConfig:
     if isinstance(rss, str):
         rss = [rss]
 
-    faiss_dir = root / (paths.get("faiss_index_dir") or "data/faiss_index")
+    faiss_dir_cfg = str(paths.get("faiss_index_dir") or "data/faiss_index")
+    # On Hugging Face Spaces, prefer persistent volume if available.
+    if os.getenv("SPACE_ID") and not os.getenv("FAISS_INDEX_DIR"):
+        faiss_dir = Path("/data/faiss_index")
+    else:
+        faiss_dir = Path(os.getenv("FAISS_INDEX_DIR", faiss_dir_cfg))
+        if not faiss_dir.is_absolute():
+            faiss_dir = root / faiss_dir
     logs_dir = root / (paths.get("logs_dir") or "logs")
     raw_docs = root / (paths.get("raw_docs_dir") or "data/raw_docs")
 

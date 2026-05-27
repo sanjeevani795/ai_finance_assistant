@@ -36,7 +36,7 @@ def load_faiss(cfg: AppConfig) -> Any:
 
     faiss_file, pkl_file = faiss_paths(cfg)
     if not faiss_file.is_file() or not pkl_file.is_file():
-        logger.warning("FAISS index not found at %s — RAG will return empty context.", faiss_file)
+        logger.info("FAISS index not found at %s; running without RAG context.", faiss_file)
         return None
     try:
         vs = FAISS.load_local(

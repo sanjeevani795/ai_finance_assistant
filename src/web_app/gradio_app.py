@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import inspect
 import sys
 import time
 import uuid
@@ -20,7 +21,8 @@ import gradio as gr
 
 from core.config import alpha_vantage_key, load_config, require_openai_key
 from data.market_service import MarketDataService
-from rag.faiss_store import load_faiss
+from rag.faiss_store import build_faiss_from_documents, load_faiss, save_faiss
+from rag.ingest import chunk_documents, load_text_file
 from rag.retriever import FinanceRetriever
 from utils.logging_config import setup_logging
 from utils.scope_guard import OUT_OF_SCOPE_REPLY, is_finance_or_specialist_scope
@@ -46,6 +48,101 @@ def _format_history_for_graph(history: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
+def _chatbot_supports_messages_type() -> bool:
+    try:
+        return "type" in inspect.signature(gr.Chatbot.__init__).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _normalize_ui_history_to_messages(history: object) -> list[dict[str, str]]:
+    if not history:
+        return []
+    messages: list[dict[str, str]] = []
+    for item in history:  # type: ignore[assignment]
+        if isinstance(item, dict):
+            role = str(item.get("role") or "").strip().lower()
+            content = str(item.get("content") or "")
+            if role in {"user", "assistant"}:
+                messages.append({"role": role, "content": content})
+        elif isinstance(item, (list, tuple)) and len(item) == 2:
+            user_text = "" if item[0] is None else str(item[0])
+            assistant_text = "" if item[1] is None else str(item[1])
+            if user_text:
+                messages.append({"role": "user", "content": user_text})
+            if assistant_text:
+                messages.append({"role": "assistant", "content": assistant_text})
+    return messages
+
+
+def _messages_to_legacy_pairs(messages: list[dict[str, str]]) -> list[list[str | None]]:
+    pairs: list[list[str | None]] = []
+    pending_user: str | None = None
+    for msg in messages:
+        role = str(msg.get("role") or "").strip().lower()
+        content = str(msg.get("content") or "")
+        if role == "user":
+            if pending_user is not None:
+                pairs.append([pending_user, None])
+            pending_user = content
+        elif role == "assistant":
+            if pending_user is None:
+                pairs.append(["", content])
+            else:
+                pairs.append([pending_user, content])
+                pending_user = None
+    if pending_user is not None:
+        pairs.append([pending_user, None])
+    return pairs
+
+
+def _to_ui_history(messages: list[dict[str, str]], messages_mode: bool) -> object:
+    if messages_mode:
+        return messages
+    return _messages_to_legacy_pairs(messages)
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _maybe_build_faiss_if_missing(cfg) -> None:
+    if not _bool_env("AUTO_BUILD_FAISS_ON_STARTUP", default=False):
+        return
+    sample = _ROOT / "data" / "sample_kb.txt"
+    raw_docs_dir = cfg.raw_docs_dir
+    docs = []
+    if sample.is_file():
+        docs.extend(
+            load_text_file(
+                sample,
+                source_url="internal://sample_kb",
+                category="Personal Finance / Investing",
+            )
+        )
+    if raw_docs_dir.is_dir():
+        for pattern in ("*.txt", "*.md"):
+            for p in sorted(raw_docs_dir.rglob(pattern)):
+                docs.extend(
+                    load_text_file(
+                        p,
+                        source_url=f"internal://raw_docs/{p.relative_to(raw_docs_dir)}",
+                        category="User Docs",
+                    )
+                )
+    if not docs:
+        logger.info("AUTO_BUILD_FAISS_ON_STARTUP=true but no source docs found; skipping FAISS build.")
+        return
+    logger.info("Building FAISS index on startup into %s", cfg.faiss_index_dir)
+    chunks = chunk_documents(docs, cfg)
+    store = build_faiss_from_documents(chunks, cfg)
+    save_faiss(store, cfg)
+    logger.info("FAISS index build complete.")
+
+
 def make_respond_fn():
     cfg = load_config()
     setup_logging(cfg.logs_dir)
@@ -54,11 +151,15 @@ def make_respond_fn():
     logger.info("Alpha Vantage key detected: %s", "yes" if av_key else "no")
 
     store = load_faiss(cfg)
+    if store is None:
+        _maybe_build_faiss_if_missing(cfg)
+        store = load_faiss(cfg)
     retriever = FinanceRetriever(cfg, store)
     market = MarketDataService(cfg)
     deps = WorkflowDeps(cfg=cfg, retriever=retriever, market=market)
     graph = build_graph(deps)
     profile_json = default_user_profile_json()
+    messages_mode = _chatbot_supports_messages_type()
 
     def _status_lines_from_event(event: dict) -> list[str]:
         lines: list[str] = []
@@ -83,21 +184,21 @@ def make_respond_fn():
 
     def respond(
         message: str,
-        history: list[dict[str, str]],
+        history: object,
         thread_id: str,
-    ) -> Generator[tuple[list[dict[str, str]], str], None, None]:
+    ) -> Generator[tuple[object, str], None, None]:
+        messages = _normalize_ui_history_to_messages(history)
         message = (message or "").strip()
         if not message:
-            yield history, thread_id
+            yield _to_ui_history(messages, messages_mode), thread_id
             return
         if not is_finance_or_specialist_scope(message):
-            history = history or []
-            history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": OUT_OF_SCOPE_REPLY})
-            yield history, thread_id
+            messages.append({"role": "user", "content": message})
+            messages.append({"role": "assistant", "content": OUT_OF_SCOPE_REPLY})
+            yield _to_ui_history(messages, messages_mode), thread_id
             return
 
-        convo = _format_history_for_graph(history)
+        convo = _format_history_for_graph(messages)
         state = {
             "user_query": message,
             "conversation_context": convo,
@@ -105,11 +206,10 @@ def make_respond_fn():
         }
         config = {"configurable": {"thread_id": thread_id or "default"}}
 
-        history = history or []
         status = "Processing your request...\n"
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": status})
-        yield history, thread_id
+        messages.append({"role": "user", "content": message})
+        messages.append({"role": "assistant", "content": status})
+        yield _to_ui_history(messages, messages_mode), thread_id
 
         try:
             final_answer = ""
@@ -122,8 +222,8 @@ def make_respond_fn():
                 new_lines = _status_lines_from_event(event)
                 if new_lines:
                     status = status + "\n".join(new_lines) + "\n"
-                    history[-1]["content"] = status
-                    yield history, thread_id
+                    messages[-1]["content"] = status
+                    yield _to_ui_history(messages, messages_mode), thread_id
             answer = final_answer or "No response generated."
         except Exception as exc:  # noqa: BLE001
             logger.exception("Graph invoke failed.")
@@ -132,16 +232,16 @@ def make_respond_fn():
                 f"Details have been logged. ({type(exc).__name__}: {exc})"
             )
 
-        history[-1]["content"] = ""
-        yield history, thread_id
+        messages[-1]["content"] = ""
+        yield _to_ui_history(messages, messages_mode), thread_id
 
         # Stream final text to UI in chunks for a progressive chat experience.
         chunk_size = 28
         built = ""
         for i in range(0, len(answer), chunk_size):
             built += answer[i : i + chunk_size]
-            history[-1]["content"] = built
-            yield history, thread_id
+            messages[-1]["content"] = built
+            yield _to_ui_history(messages, messages_mode), thread_id
             time.sleep(0.01)
 
     return respond
@@ -158,7 +258,10 @@ def launch() -> None:
             "**Educational use only** — not personalized financial or tax advice."
         )
         thread = gr.State(str(uuid.uuid4()))
-        chat = gr.Chatbot(type="messages", label="Conversation", height=480)
+        if _chatbot_supports_messages_type():
+            chat = gr.Chatbot(type="messages", label="Conversation", height=480)
+        else:
+            chat = gr.Chatbot(label="Conversation", height=480)
         msg = gr.Textbox(
             label="Your message",
             placeholder="e.g. What is dollar-cost averaging?  Or: What is AAPL trading at?",
