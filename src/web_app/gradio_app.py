@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import inspect
 import sys
 import time
 import uuid
@@ -46,13 +45,6 @@ def _format_history_for_graph(history: list[dict[str, str]]) -> str:
         elif role == "assistant":
             lines.append(f"Assistant: {content}")
     return "\n".join(lines)
-
-
-def _chatbot_supports_messages_type() -> bool:
-    try:
-        return "type" in inspect.signature(gr.Chatbot.__init__).parameters
-    except (TypeError, ValueError):
-        return False
 
 
 def _normalize_ui_history_to_messages(history: object) -> list[dict[str, str]]:
@@ -143,7 +135,7 @@ def _maybe_build_faiss_if_missing(cfg) -> None:
     logger.info("FAISS index build complete.")
 
 
-def make_respond_fn():
+def make_respond_fn(*, messages_mode: bool):
     cfg = load_config()
     setup_logging(cfg.logs_dir)
     require_openai_key()
@@ -159,8 +151,6 @@ def make_respond_fn():
     deps = WorkflowDeps(cfg=cfg, retriever=retriever, market=market)
     graph = build_graph(deps)
     profile_json = default_user_profile_json()
-    messages_mode = _chatbot_supports_messages_type()
-
     def _status_lines_from_event(event: dict) -> list[str]:
         lines: list[str] = []
         for node, payload in event.items():
@@ -248,8 +238,6 @@ def make_respond_fn():
 
 
 def launch() -> None:
-    respond = make_respond_fn()
-
     with gr.Blocks(title="AI Finance Assistant") as demo:
         gr.Markdown(
             "## AI Finance Assistant\n"
@@ -258,10 +246,14 @@ def launch() -> None:
             "**Educational use only** — not personalized financial or tax advice."
         )
         thread = gr.State(str(uuid.uuid4()))
-        if _chatbot_supports_messages_type():
-            chat = gr.Chatbot(type="messages", label="Conversation", height=480)
-        else:
-            chat = gr.Chatbot(label="Conversation", height=480)
+        messages_mode = True
+        chat_kwargs = {"label": "Conversation", "height": 480}
+        try:
+            chat = gr.Chatbot(type="messages", **chat_kwargs)
+        except TypeError:
+            messages_mode = False
+            chat = gr.Chatbot(**chat_kwargs)
+        respond = make_respond_fn(messages_mode=messages_mode)
         msg = gr.Textbox(
             label="Your message",
             placeholder="e.g. What is dollar-cost averaging?  Or: What is AAPL trading at?",
