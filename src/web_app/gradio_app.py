@@ -89,9 +89,15 @@ def _messages_to_legacy_pairs(messages: list[dict[str, str]]) -> list[list[str |
 
 
 def _to_ui_history(messages: list[dict[str, str]], messages_mode: bool) -> object:
+    sanitized: list[dict[str, str]] = []
+    for m in messages:
+        role = str(m.get("role") or "").strip().lower()
+        if role not in {"user", "assistant"}:
+            continue
+        sanitized.append({"role": role, "content": str(m.get("content") or "")})
     if messages_mode:
-        return messages
-    return _messages_to_legacy_pairs(messages)
+        return sanitized
+    return _messages_to_legacy_pairs(sanitized)
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -246,13 +252,12 @@ def launch() -> None:
             "**Educational use only** — not personalized financial or tax advice."
         )
         thread = gr.State(str(uuid.uuid4()))
-        messages_mode = True
         chat_kwargs = {"label": "Conversation", "height": 480}
         try:
             chat = gr.Chatbot(type="messages", **chat_kwargs)
         except TypeError:
-            messages_mode = False
             chat = gr.Chatbot(**chat_kwargs)
+        messages_mode = str(getattr(chat, "type", "")).strip().lower() == "messages"
         respond = make_respond_fn(messages_mode=messages_mode)
         msg = gr.Textbox(
             label="Your message",
@@ -266,7 +271,10 @@ def launch() -> None:
         send.click(respond, inputs=[msg, chat, thread], outputs=[chat, thread]).then(
             lambda: "", outputs=msg
         )
-        new_session.click(lambda: ([], str(uuid.uuid4())), outputs=[chat, thread])
+        new_session.click(
+            lambda: (_to_ui_history([], messages_mode), str(uuid.uuid4())),
+            outputs=[chat, thread],
+        )
 
     host = os.getenv("GRADIO_SERVER_NAME", "127.0.0.1")
     port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
