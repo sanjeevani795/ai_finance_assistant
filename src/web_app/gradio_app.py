@@ -29,17 +29,20 @@ from workflow.graph import WorkflowDeps, build_graph, default_user_profile_json
 logger = logging.getLogger(__name__)
 
 
-def _format_history_for_graph(history: list[list[str | None]]) -> str:
-    """Gradio Chatbot history: list of [user, assistant]."""
+def _format_history_for_graph(history: list[dict[str, str]]) -> str:
+    """Gradio Chatbot history in messages format."""
     if not history:
         return ""
     lines: list[str] = []
-    for turn in history[-8:]:
-        u, a = turn[0] or "", turn[1] or ""
-        if u.strip():
-            lines.append(f"User: {u.strip()}")
-        if a.strip():
-            lines.append(f"Assistant: {a.strip()}")
+    for msg in history[-16:]:
+        role = str(msg.get("role") or "").strip().lower()
+        content = str(msg.get("content") or "").strip()
+        if not content:
+            continue
+        if role == "user":
+            lines.append(f"User: {content}")
+        elif role == "assistant":
+            lines.append(f"Assistant: {content}")
     return "\n".join(lines)
 
 
@@ -80,16 +83,17 @@ def make_respond_fn():
 
     def respond(
         message: str,
-        history: list[list[str | None]],
+        history: list[dict[str, str]],
         thread_id: str,
-    ) -> Generator[tuple[list[list[str | None]], str], None, None]:
+    ) -> Generator[tuple[list[dict[str, str]], str], None, None]:
         message = (message or "").strip()
         if not message:
             yield history, thread_id
             return
         if not is_finance_or_specialist_scope(message):
             history = history or []
-            history.append([message, OUT_OF_SCOPE_REPLY])
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": OUT_OF_SCOPE_REPLY})
             yield history, thread_id
             return
 
@@ -103,7 +107,8 @@ def make_respond_fn():
 
         history = history or []
         status = "Processing your request...\n"
-        history.append([message, status])
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": status})
         yield history, thread_id
 
         try:
@@ -117,7 +122,7 @@ def make_respond_fn():
                 new_lines = _status_lines_from_event(event)
                 if new_lines:
                     status = status + "\n".join(new_lines) + "\n"
-                    history[-1][1] = status
+                    history[-1]["content"] = status
                     yield history, thread_id
             answer = final_answer or "No response generated."
         except Exception as exc:  # noqa: BLE001
@@ -127,7 +132,7 @@ def make_respond_fn():
                 f"Details have been logged. ({type(exc).__name__}: {exc})"
             )
 
-        history[-1][1] = ""
+        history[-1]["content"] = ""
         yield history, thread_id
 
         # Stream final text to UI in chunks for a progressive chat experience.
@@ -135,7 +140,7 @@ def make_respond_fn():
         built = ""
         for i in range(0, len(answer), chunk_size):
             built += answer[i : i + chunk_size]
-            history[-1][1] = built
+            history[-1]["content"] = built
             yield history, thread_id
             time.sleep(0.01)
 
@@ -153,7 +158,7 @@ def launch() -> None:
             "**Educational use only** — not personalized financial or tax advice."
         )
         thread = gr.State(str(uuid.uuid4()))
-        chat = gr.Chatbot(label="Conversation", height=480)
+        chat = gr.Chatbot(type="messages", label="Conversation", height=480)
         msg = gr.Textbox(
             label="Your message",
             placeholder="e.g. What is dollar-cost averaging?  Or: What is AAPL trading at?",
