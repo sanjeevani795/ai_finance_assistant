@@ -67,27 +67,6 @@ def _normalize_ui_history_to_messages(history: object) -> list[dict[str, str]]:
     return messages
 
 
-def _messages_to_legacy_pairs(messages: list[dict[str, str]]) -> list[list[str | None]]:
-    pairs: list[list[str | None]] = []
-    pending_user: str | None = None
-    for msg in messages:
-        role = str(msg.get("role") or "").strip().lower()
-        content = str(msg.get("content") or "")
-        if role == "user":
-            if pending_user is not None:
-                pairs.append([pending_user, None])
-            pending_user = content
-        elif role == "assistant":
-            if pending_user is None:
-                pairs.append(["", content])
-            else:
-                pairs.append([pending_user, content])
-                pending_user = None
-    if pending_user is not None:
-        pairs.append([pending_user, None])
-    return pairs
-
-
 def _to_ui_history(messages: list[dict[str, str]], messages_mode: bool) -> object:
     sanitized: list[dict[str, str]] = []
     for m in messages:
@@ -95,10 +74,7 @@ def _to_ui_history(messages: list[dict[str, str]], messages_mode: bool) -> objec
         if role not in {"user", "assistant"}:
             continue
         sanitized.append({"role": role, "content": str(m.get("content") or "")})
-    if messages_mode:
-        return sanitized
-    print("log sanitized value check : " , sanitized)
-    return _messages_to_legacy_pairs(sanitized)
+    return sanitized
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -258,7 +234,7 @@ def launch() -> None:
             chat = gr.Chatbot(type="messages", **chat_kwargs)
         except TypeError:
             chat = gr.Chatbot(**chat_kwargs)
-        messages_mode = str(getattr(chat, "type", "")).strip().lower() == "messages"
+        messages_mode = True
         respond = make_respond_fn(messages_mode=messages_mode)
         msg = gr.Textbox(
             label="Your message",
