@@ -97,7 +97,7 @@ def _to_ui_history(messages: list[dict[str, str]], messages_mode: bool) -> objec
         sanitized.append({"role": role, "content": str(m.get("content") or "")})
     if messages_mode:
         return sanitized
-    print("log samitized value check : " , sanitized)
+    print("log sanitized value check : " , sanitized)
     return _messages_to_legacy_pairs(sanitized)
 
 
