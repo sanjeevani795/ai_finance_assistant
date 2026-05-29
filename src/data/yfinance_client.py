@@ -43,9 +43,19 @@ def yfinance_quote(symbol: str, cfg: AppConfig, cache: TTLCache) -> dict[str, An
             cur = None
             fast = getattr(t, "fast_info", None)
             if fast is not None:
-                last = getattr(fast, "last_price", None) or getattr(fast, "lastPrice", None)
-                prev = getattr(fast, "previous_close", None) or getattr(fast, "previousClose", None)
-                cur = getattr(fast, "currency", None) or getattr(fast, "currency_code", None)
+                # yfinance fast_info can raise on attribute access when Yahoo metadata is partial.
+                try:
+                    last = getattr(fast, "last_price", None) or getattr(fast, "lastPrice", None)
+                except Exception:  # noqa: BLE001
+                    last = None
+                try:
+                    prev = getattr(fast, "previous_close", None) or getattr(fast, "previousClose", None)
+                except Exception:  # noqa: BLE001
+                    prev = None
+                try:
+                    cur = getattr(fast, "currency", None) or getattr(fast, "currency_code", None)
+                except Exception:  # noqa: BLE001
+                    cur = None
             if last is None:
                 hist = _history_with_fallbacks(t, ("5d", "1mo"))
                 if hist is None or hist.empty:
