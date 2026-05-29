@@ -30,6 +30,32 @@ from workflow.graph import WorkflowDeps, build_graph, default_user_profile_json
 logger = logging.getLogger(__name__)
 
 
+def _content_to_text(content: object) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                if str(block.get("type") or "").lower() == "text":
+                    text = block.get("text")
+                    if text is not None:
+                        parts.append(str(text))
+                elif "content" in block and block.get("content") is not None:
+                    parts.append(str(block.get("content")))
+            elif block is not None:
+                parts.append(str(block))
+        return "\n".join(p for p in parts if p).strip()
+    if isinstance(content, dict):
+        if str(content.get("type") or "").lower() == "text":
+            return str(content.get("text") or "")
+        if "content" in content:
+            return str(content.get("content") or "")
+    return str(content)
+
+
 def _format_history_for_graph(history: list[dict[str, str]]) -> str:
     """Gradio Chatbot history in messages format."""
     if not history:
@@ -37,7 +63,7 @@ def _format_history_for_graph(history: list[dict[str, str]]) -> str:
     lines: list[str] = []
     for msg in history[-16:]:
         role = str(msg.get("role") or "").strip().lower()
-        content = str(msg.get("content") or "").strip()
+        content = _content_to_text(msg.get("content")).strip()
         if not content:
             continue
         if role == "user":
@@ -54,7 +80,7 @@ def _normalize_ui_history_to_messages(history: object) -> list[dict[str, str]]:
     for item in history:  # type: ignore[assignment]
         if isinstance(item, dict):
             role = str(item.get("role") or "").strip().lower()
-            content = str(item.get("content") or "")
+            content = _content_to_text(item.get("content"))
             if role in {"user", "assistant"}:
                 messages.append({"role": role, "content": content})
         elif isinstance(item, (list, tuple)) and len(item) == 2:
@@ -73,7 +99,7 @@ def _to_ui_history(messages: list[dict[str, str]], messages_mode: bool) -> objec
         role = str(m.get("role") or "").strip().lower()
         if role not in {"user", "assistant"}:
             continue
-        sanitized.append({"role": role, "content": str(m.get("content") or "")})
+        sanitized.append({"role": role, "content": _content_to_text(m.get("content"))})
     return sanitized
 
 
